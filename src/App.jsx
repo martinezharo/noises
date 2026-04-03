@@ -1,21 +1,33 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createLoopPlayer } from './audio/createLoopPlayer.js';
 import { PlayIcon } from './icons/Play.jsx';
 import { PauseIcon } from './icons/Pause.jsx';
 import { TimerIcon } from './icons/Timer.jsx';
 import { SkipNextIcon } from './icons/SkipNext.jsx';
 
+// Lista de ruidos
 const NOISES = [
   {
     name: 'brown',
     bgColor: 'bg-amber-900',
     textColor: 'text-amber-200',
-    src: 'noises/brown-noise.mp3',
+    src: 'noises/brown-noise.wav',
+    loop: {
+      strategy: 'crossfade',
+      crossfadeSeconds: 0.4,
+      searchWindowSeconds: 1.6,
+      edgeTrimSeconds: 0.05,
+      analysisStepSeconds: 0.02,
+    },
   },
   {
     name: 'white',
     bgColor: 'bg-black',
     textColor: 'text-white',
     src: 'noises/white-noise-looped.mp3',
+    loop: {
+      strategy: 'native',
+    },
   },
 ];
 
@@ -24,62 +36,57 @@ function App() {
   const [playing, setPlaying] = useState(false);
 
   const audioCtxRef = useRef(null);
-  const sourceRef = useRef(null);
-  const buffersRef = useRef({});
+  const playerRef = useRef(null);
 
   function getAudioCtx() {
     if (!audioCtxRef.current) {
-      audioCtxRef.current = new AudioContext();
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
     }
+
     return audioCtxRef.current;
   }
 
-  function stopSource() {
-    if (sourceRef.current) {
-      sourceRef.current.stop();
-      sourceRef.current = null;
-    }
+  if (!playerRef.current) {
+    playerRef.current = createLoopPlayer(getAudioCtx);
   }
 
-  async function startSource(src) {
-    const ctx = getAudioCtx();
-    if (ctx.state === 'suspended') await ctx.resume();
-
-    stopSource();
-
-    if (!buffersRef.current[src]) {
-      const response = await fetch(src);
-      const arrayBuffer = await response.arrayBuffer();
-      buffersRef.current[src] = await ctx.decodeAudioData(arrayBuffer);
-    }
-
-    const source = ctx.createBufferSource();
-    source.buffer = buffersRef.current[src];
-    source.loop = true;
-    source.connect(ctx.destination);
-    source.start();
-    sourceRef.current = source;
-  }
+  const current = NOISES[noiseIndex];
 
   async function handlePlayPause() {
     if (playing) {
-      stopSource();
+      playerRef.current.stop();
       setPlaying(false);
     } else {
-      await startSource(NOISES[noiseIndex].src);
-      setPlaying(true);
+      const started = await playerRef.current.start(current, playerRef.current.getPosition());
+
+      if (started) {
+        setPlaying(true);
+      }
     }
   }
 
   async function handleSkip() {
     const next = (noiseIndex + 1) % NOISES.length;
+    const nextNoise = NOISES[next];
+
     setNoiseIndex(next);
+
     if (playing) {
-      await startSource(NOISES[next].src);
+      await playerRef.current.start(nextNoise, 0);
+    } else {
+      await playerRef.current.seek(nextNoise, 0);
     }
   }
 
-  const current = NOISES[noiseIndex];
+  useEffect(() => {
+    playerRef.current.prepare(current).catch(() => {});
+  }, [current]);
+
+  useEffect(() => {
+    return () => {
+      playerRef.current?.dispose();
+    };
+  }, []);
 
   return (
     <div className={`${current.bgColor} flex flex-col h-screen`}>
