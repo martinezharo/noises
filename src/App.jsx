@@ -88,6 +88,21 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handlePlayPause();
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        handleSkip();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [playing, noiseIndex]);
+
   return (
     <div className={`${current.bgColor} flex flex-col h-screen`}>
       <main className="h-4/5 flex items-center justify-center">
@@ -100,13 +115,13 @@ function App() {
           <TimerIcon size={36} />
         </button>
         <button
-          className={`${current.textColor} transition-transform hover:scale-110`}
+          className={`${current.textColor} transition-transform hover:scale-110 focus:outline-none focus:ring-0`}
           onClick={handlePlayPause}
         >
           {playing ? <PauseIcon size={52} /> : <PlayIcon size={52} />}
         </button>
         <button
-          className={`${current.textColor} transition-transform hover:scale-110`}
+          className={`${current.textColor} transition-transform hover:scale-110 focus:outline-none focus:ring-0`}
           onClick={handleSkip}
         >
           <SkipNextIcon size={36} />
