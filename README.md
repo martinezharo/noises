@@ -1,18 +1,29 @@
-# React + Vite
+# White / Brown Noise — Noises
+===========================
+- A small React + Vite project that provides white/brown noise playback utilities and a simple UI to control loops and playback.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Key details
+- **Framework:** React with Vite
+- **Styles:** Tailwind CSS
+- **Audio helpers:** small audio utility in `src/assets/audio/createLoopPlayer.js`
+- **Icons:** simple icon components in `src/assets/icons/`
 
-Currently, two official plugins are available:
+Getting started
+1. Install dependencies: `pnpm install` (or `npm install` / `yarn`)
+2. Run development server: `pnpm dev`
+3. Build for production: `pnpm build`
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Project structure (high level)
+- `src/` — React source files (`App.jsx`, `main.jsx`, styles)
+- `src/assets/audio/` — audio helper(s) and players
+- `src/assets/icons/` — small icon components (Play, Pause, Skip, Timer)
+- `public/noises/` — bundled audio assets served statically
 
-## React Compiler
+Notes for contributors
+- The project is intentionally small and focused on audio loop playback.
+- Keep components simple and prefer small, testable helpers for audio logic.
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+License
+- This project is available under the MIT License (see `LICENSE`).
 
-Note: This will impact Vite dev & build performances.
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Made with ❤️ by [Oli](https://olivermartinezharo.com)
