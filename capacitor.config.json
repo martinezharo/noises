@@ -1,0 +1,15 @@
+{
+  "appId": "com.martinezharo.noises",
+  "appName": "Noises",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#000000"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "backgroundColor": "#000000",
+      "showSpinner": false
+    }
+  }
+}
