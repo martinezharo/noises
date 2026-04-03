@@ -34,9 +34,11 @@ const NOISES = [
 function App() {
   const [noiseIndex, setNoiseIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [isIdle, setIsIdle] = useState(false);
 
   const audioCtxRef = useRef(null);
   const playerRef = useRef(null);
+  const idleTimerRef = useRef(null);
 
   function getAudioCtx() {
     if (!audioCtxRef.current) {
@@ -52,7 +54,21 @@ function App() {
 
   const current = NOISES[noiseIndex];
 
+  const resetIdleTimer = useRef(() => {});
+  
+  resetIdleTimer.current = () => {
+    setIsIdle(false);
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+
+    if (!playing) return;
+
+    idleTimerRef.current = setTimeout(() => {
+      setIsIdle(true);
+    }, 5000);
+  };
+
   async function handlePlayPause() {
+    resetIdleTimer.current();
     if (playing) {
       playerRef.current.stop();
       setPlaying(false);
@@ -66,6 +82,7 @@ function App() {
   }
 
   async function handleSkip() {
+    resetIdleTimer.current();
     const next = (noiseIndex + 1) % NOISES.length;
     const nextNoise = NOISES[next];
 
@@ -81,6 +98,27 @@ function App() {
   useEffect(() => {
     playerRef.current.prepare(current).catch(() => {});
   }, [current]);
+
+  useEffect(() => {
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'scroll'];
+    
+    const activityHandler = () => {
+      resetIdleTimer.current();
+    };
+
+    activityEvents.forEach(event => {
+      window.addEventListener(event, activityHandler);
+    });
+
+    resetIdleTimer.current();
+
+    return () => {
+      activityEvents.forEach(event => {
+        window.removeEventListener(event, activityHandler);
+      });
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [playing]);
 
   useEffect(() => {
     return () => {
@@ -104,29 +142,31 @@ function App() {
   }, [playing, noiseIndex]);
 
   return (
-    <div className={`${current.bgColor} flex flex-col h-screen`}>
-      <main className="h-4/5 flex items-center justify-center">
-        <h1 className={`text-9xl font-bold ${current.textColor} tracking-wider`}>
-          {current.name.toUpperCase()}
-        </h1>
-      </main>
-      <nav className="h-1/5 flex items-center justify-center gap-20">
-        <button className={`${current.textColor} opacity-40 cursor-not-allowed`} disabled>
-          <TimerIcon size={36} />
-        </button>
-        <button
-          className={`${current.textColor} transition-transform hover:scale-110 focus:outline-none focus:ring-0`}
-          onClick={handlePlayPause}
-        >
-          {playing ? <PauseIcon size={52} /> : <PlayIcon size={52} />}
-        </button>
-        <button
-          className={`${current.textColor} transition-transform hover:scale-110 focus:outline-none focus:ring-0`}
-          onClick={handleSkip}
-        >
-          <SkipNextIcon size={36} />
-        </button>
-      </nav>
+    <div className={`${current.bgColor} flex flex-col h-screen transition-colors duration-1000 ${isIdle ? 'bg-black' : ''}`}>
+      <div className={`flex flex-col h-full transition-opacity duration-1000 ${isIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <main className="h-4/5 flex items-center justify-center">
+          <h1 className={`text-9xl font-bold ${current.textColor} tracking-wider`}>
+            {current.name.toUpperCase()}
+          </h1>
+        </main>
+        <nav className="h-1/5 flex items-center justify-center gap-20">
+          <button className={`${current.textColor} opacity-40 cursor-not-allowed focus:outline-none focus:ring-0`} disabled>
+            <TimerIcon size={36} />
+          </button>
+          <button
+            className={`${current.textColor} transition-transform hover:scale-110 focus:outline-none focus:ring-0`}
+            onClick={handlePlayPause}
+          >
+            {playing ? <PauseIcon size={52} /> : <PlayIcon size={52} />}
+          </button>
+          <button
+            className={`${current.textColor} transition-transform hover:scale-110 focus:outline-none focus:ring-0`}
+            onClick={handleSkip}
+          >
+            <SkipNextIcon size={36} />
+          </button>
+        </nav>
+      </div>
     </div>
   );
 }
