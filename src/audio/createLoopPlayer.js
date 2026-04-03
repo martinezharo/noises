@@ -1,6 +1,6 @@
-const CURVE_STEPS = 128;
+const CURVE_STEPS = 256;
 const START_RAMP_SECONDS = 0.01;
-const SCHEDULE_AHEAD_SECONDS = 0.25;
+const DEFAULT_ANALYSIS_STEP_SECONDS = 0.02;
 
 const FADE_IN_CURVE = createFadeCurve('in');
 const FADE_OUT_CURVE = createFadeCurve('out');
@@ -10,6 +10,7 @@ function createFadeCurve(direction) {
 
   for (let index = 0; index < CURVE_STEPS; index += 1) {
     const progress = index / (CURVE_STEPS - 1);
+
     curve[index] = direction === 'in'
       ? Math.sin((progress * Math.PI) / 2)
       : Math.cos((progress * Math.PI) / 2);
@@ -41,96 +42,199 @@ function mixToMono(buffer) {
 }
 
 function scoreLoopBoundary(channelData, startSample, endSample, overlapSamples, stride) {
-  const endWindowStart = endSample - overlapSamples;
+  const tailStartSample = endSample - overlapSamples;
   let total = 0;
   let count = 0;
 
   for (let index = 0; index < overlapSamples; index += stride) {
     const sampleA = channelData[startSample + index];
-    const sampleB = channelData[endWindowStart + index];
+    const sampleB = channelData[tailStartSample + index];
     const nextIndex = Math.min(index + stride, overlapSamples - 1);
     const nextSampleA = channelData[startSample + nextIndex];
-    const nextSampleB = channelData[endWindowStart + nextIndex];
+    const nextSampleB = channelData[tailStartSample + nextIndex];
     const slopeA = nextSampleA - sampleA;
     const slopeB = nextSampleB - sampleB;
 
-    total += Math.abs(sampleA - sampleB) * 0.8;
+    total += Math.abs(sampleA - sampleB) * 0.75;
     total += Math.abs(slopeA - slopeB) * 0.2;
+    total += Math.abs(Math.abs(sampleA) - Math.abs(sampleB)) * 0.05;
     count += 1;
   }
 
   return count ? total / count : Number.POSITIVE_INFINITY;
 }
 
-function createLoopDescriptor(buffer, loopConfig = {}) {
+function searchBestLoopPair(channelData, options) {
+  const {
+    analysisStride,
+    candidateStep,
+    endFrom,
+    endTo,
+    minimumDistanceSamples,
+    overlapSamples,
+    startFrom,
+    startTo,
+  } = options;
+
+  let best = null;
+
+  for (let startSample = startFrom; startSample <= startTo; startSample += candidateStep) {
+    for (let endSample = endFrom; endSample <= endTo; endSample += candidateStep) {
+      if (endSample - startSample < minimumDistanceSamples) {
+        continue;
+      }
+
+      const score = scoreLoopBoundary(channelData, startSample, endSample, overlapSamples, analysisStride);
+
+      if (!best || score < best.score) {
+        best = {
+          endSample,
+          score,
+          startSample,
+        };
+      }
+    }
+  }
+
+  return best;
+}
+
+function findBestLoopSamples(buffer, loopConfig = {}) {
+  const sampleRate = buffer.sampleRate;
+  const edgeTrimSeconds = Math.min(loopConfig.edgeTrimSeconds ?? 0.04, buffer.duration / 8);
+  const searchWindowSeconds = Math.min(loopConfig.searchWindowSeconds ?? 1.4, buffer.duration / 3);
+  const requestedCrossfadeSeconds = loopConfig.crossfadeSeconds ?? 0.35;
+  const crossfadeSeconds = Math.min(requestedCrossfadeSeconds, Math.max(0.12, buffer.duration / 6));
+  const overlapSamples = Math.max(2048, Math.floor(crossfadeSeconds * sampleRate));
+  const trimSamples = Math.floor(edgeTrimSeconds * sampleRate);
+  const searchSamples = Math.max(overlapSamples * 2, Math.floor(searchWindowSeconds * sampleRate));
+  const maxStartSample = Math.min(trimSamples + searchSamples, buffer.length - overlapSamples * 3);
+  const minEndSample = Math.max(overlapSamples * 3, buffer.length - trimSamples - searchSamples);
+
+  if (maxStartSample <= trimSamples || minEndSample >= buffer.length - trimSamples) {
+    return null;
+  }
+
+  const mono = mixToMono(buffer);
+  const coarseStep = Math.max(256, Math.floor((loopConfig.analysisStepSeconds ?? DEFAULT_ANALYSIS_STEP_SECONDS) * sampleRate));
+  const fineStep = Math.max(16, Math.floor(coarseStep / 8));
+  const refineWindow = coarseStep * 2;
+  const analysisStride = Math.max(8, Math.floor(overlapSamples / 384));
+  const minimumDistanceSamples = overlapSamples * 3;
+
+  const coarseBest = searchBestLoopPair(mono, {
+    analysisStride,
+    candidateStep: coarseStep,
+    endFrom: minEndSample,
+    endTo: buffer.length - trimSamples,
+    minimumDistanceSamples,
+    overlapSamples,
+    startFrom: trimSamples,
+    startTo: maxStartSample,
+  });
+
+  if (!coarseBest) {
+    return null;
+  }
+
+  const fineBest = searchBestLoopPair(mono, {
+    analysisStride,
+    candidateStep: fineStep,
+    endFrom: Math.max(minEndSample, coarseBest.endSample - refineWindow),
+    endTo: Math.min(buffer.length - trimSamples, coarseBest.endSample + refineWindow),
+    minimumDistanceSamples,
+    overlapSamples,
+    startFrom: Math.max(trimSamples, coarseBest.startSample - refineWindow),
+    startTo: Math.min(maxStartSample, coarseBest.startSample + refineWindow),
+  });
+
+  const best = fineBest ?? coarseBest;
+  const loopLengthSamples = best.endSample - best.startSample;
+  const safeOverlapSamples = Math.min(overlapSamples, Math.floor(loopLengthSamples / 4));
+
+  if (safeOverlapSamples < 1024 || loopLengthSamples <= safeOverlapSamples * 2) {
+    return null;
+  }
+
+  return {
+    crossfadeSamples: safeOverlapSamples,
+    loopEndSample: best.endSample,
+    loopStartSample: best.startSample,
+  };
+}
+
+function renderCrossfadedLoopBuffer(context, buffer, loopSamples) {
+  const { crossfadeSamples, loopEndSample, loopStartSample } = loopSamples;
+  const loopLengthSamples = loopEndSample - loopStartSample;
+  const outputLength = loopLengthSamples - crossfadeSamples;
+
+  if (outputLength <= crossfadeSamples) {
+    return null;
+  }
+
+  const renderedBuffer = context.createBuffer(
+    buffer.numberOfChannels,
+    outputLength,
+    buffer.sampleRate,
+  );
+  const tailStartSample = loopEndSample - crossfadeSamples;
+
+  for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex += 1) {
+    const input = buffer.getChannelData(channelIndex);
+    const output = renderedBuffer.getChannelData(channelIndex);
+
+    for (let sampleIndex = 0; sampleIndex < crossfadeSamples; sampleIndex += 1) {
+      const curveIndex = Math.round((sampleIndex / (crossfadeSamples - 1)) * (CURVE_STEPS - 1));
+      const fadeIn = FADE_IN_CURVE[curveIndex];
+      const fadeOut = FADE_OUT_CURVE[curveIndex];
+      const headSample = input[loopStartSample + sampleIndex];
+      const tailSample = input[tailStartSample + sampleIndex];
+
+      output[sampleIndex] = (tailSample * fadeOut) + (headSample * fadeIn);
+    }
+
+    for (let sampleIndex = crossfadeSamples; sampleIndex < outputLength; sampleIndex += 1) {
+      output[sampleIndex] = input[loopStartSample + sampleIndex];
+    }
+  }
+
+  return renderedBuffer;
+}
+
+function createLoopDescriptor(context, buffer, loopConfig = {}) {
   const strategy = loopConfig.strategy ?? 'native';
   const fallback = {
     buffer,
-    strategy: 'native',
-    loopStart: 0,
-    loopEnd: buffer.duration,
     loopDuration: buffer.duration,
-    crossfadeSeconds: 0,
+    loopEnd: buffer.duration,
+    loopStart: 0,
+    strategy: 'native',
   };
 
   if (strategy !== 'crossfade' || buffer.duration < 1) {
     return fallback;
   }
 
-  const sampleRate = buffer.sampleRate;
-  const edgeTrimSeconds = Math.min(loopConfig.edgeTrimSeconds ?? 0.04, buffer.duration / 8);
-  const searchWindowSeconds = Math.min(loopConfig.searchWindowSeconds ?? 1.4, buffer.duration / 3);
-  const requestedCrossfadeSeconds = loopConfig.crossfadeSeconds ?? 0.35;
-  const crossfadeSeconds = Math.min(requestedCrossfadeSeconds, Math.max(0.12, buffer.duration / 6));
-  const overlapSamples = Math.max(1024, Math.floor(crossfadeSeconds * sampleRate));
-  const trimSamples = Math.floor(edgeTrimSeconds * sampleRate);
-  const searchSamples = Math.max(overlapSamples * 2, Math.floor(searchWindowSeconds * sampleRate));
-  const startSearchEnd = Math.min(trimSamples + searchSamples, buffer.length - overlapSamples * 3);
-  const endSearchStart = Math.max(overlapSamples * 3, buffer.length - trimSamples - searchSamples);
+  const loopSamples = findBestLoopSamples(buffer, loopConfig);
 
-  if (startSearchEnd <= trimSamples || endSearchStart >= buffer.length - trimSamples) {
+  if (!loopSamples) {
     return fallback;
   }
 
-  const candidateStep = Math.max(256, Math.floor((loopConfig.analysisStepSeconds ?? 0.02) * sampleRate));
-  const analysisStride = Math.max(32, Math.floor(overlapSamples / 192));
-  const mono = mixToMono(buffer);
+  const renderedBuffer = renderCrossfadedLoopBuffer(context, buffer, loopSamples);
 
-  let bestStartSample = trimSamples;
-  let bestEndSample = buffer.length - trimSamples;
-  let bestScore = Number.POSITIVE_INFINITY;
-
-  for (let startSample = trimSamples; startSample <= startSearchEnd; startSample += candidateStep) {
-    for (let endSample = endSearchStart; endSample <= buffer.length - trimSamples; endSample += candidateStep) {
-      if (endSample - startSample < overlapSamples * 3) {
-        continue;
-      }
-
-      const score = scoreLoopBoundary(mono, startSample, endSample, overlapSamples, analysisStride);
-
-      if (score < bestScore) {
-        bestScore = score;
-        bestStartSample = startSample;
-        bestEndSample = endSample;
-      }
-    }
-  }
-
-  const loopStart = bestStartSample / sampleRate;
-  const loopEnd = bestEndSample / sampleRate;
-  const loopDuration = loopEnd - loopStart;
-
-  if (loopDuration <= crossfadeSeconds * 2) {
+  if (!renderedBuffer) {
     return fallback;
   }
 
   return {
-    buffer,
-    strategy: 'crossfade',
-    loopStart,
-    loopEnd,
-    loopDuration,
-    crossfadeSeconds: Math.min(crossfadeSeconds, loopDuration / 4),
+    buffer: renderedBuffer,
+    loopDuration: renderedBuffer.duration,
+    loopEnd: renderedBuffer.duration,
+    loopStart: 0,
+    sourceLoopEnd: loopSamples.loopEndSample / buffer.sampleRate,
+    sourceLoopStart: loopSamples.loopStartSample / buffer.sampleRate,
+    strategy: 'native',
   };
 }
 
@@ -139,26 +243,17 @@ export function createLoopPlayer(getAudioContext) {
   const descriptors = new Map();
 
   let activeNodes = [];
-  let scheduleTimerId = null;
   let requestId = 0;
-  let sessionId = 0;
   let playback = {
+    duration: 0,
+    isPlaying: false,
     noiseSrc: null,
     offset: 0,
     startedAt: 0,
-    duration: 0,
-    isPlaying: false,
   };
 
   function getContext() {
     return getAudioContext();
-  }
-
-  function clearScheduler() {
-    if (scheduleTimerId !== null) {
-      window.clearTimeout(scheduleTimerId);
-      scheduleTimerId = null;
-    }
   }
 
   function removeNode(source) {
@@ -166,7 +261,8 @@ export function createLoopPlayer(getAudioContext) {
   }
 
   function registerNode(source, gainNode) {
-    activeNodes.push({ source, gainNode });
+    activeNodes.push({ gainNode, source });
+
     source.onended = () => {
       removeNode(source);
 
@@ -185,7 +281,7 @@ export function createLoopPlayer(getAudioContext) {
   }
 
   function stopNodes() {
-    for (const { source, gainNode } of activeNodes) {
+    for (const { gainNode, source } of activeNodes) {
       try {
         source.stop(0);
       } catch {
@@ -217,16 +313,13 @@ export function createLoopPlayer(getAudioContext) {
       return normalizePosition(playback.offset, playback.duration);
     }
 
-    const ctx = getContext();
-    const elapsed = Math.max(0, ctx.currentTime - playback.startedAt);
+    const context = getContext();
+    const elapsed = Math.max(0, context.currentTime - playback.startedAt);
 
     return normalizePosition(playback.offset + elapsed, playback.duration);
   }
 
   function resetPlayback({ preservePosition = true } = {}) {
-    sessionId += 1;
-    clearScheduler();
-
     if (preservePosition) {
       playback.offset = getCurrentPosition();
     } else {
@@ -244,10 +337,10 @@ export function createLoopPlayer(getAudioContext) {
       return buffers.get(src);
     }
 
-    const ctx = getContext();
+    const context = getContext();
     const response = await fetch(src);
     const arrayBuffer = await response.arrayBuffer();
-    const buffer = await ctx.decodeAudioData(arrayBuffer);
+    const buffer = await context.decodeAudioData(arrayBuffer);
 
     buffers.set(src, buffer);
 
@@ -259,9 +352,10 @@ export function createLoopPlayer(getAudioContext) {
       return descriptors.get(noise.src);
     }
 
+    const context = getContext();
     const buffer = await loadBuffer(noise.src);
     const descriptor = {
-      ...createLoopDescriptor(buffer, noise.loop),
+      ...createLoopDescriptor(context, buffer, noise.loop),
       noiseSrc: noise.src,
     };
 
@@ -270,11 +364,11 @@ export function createLoopPlayer(getAudioContext) {
     return descriptor;
   }
 
-  function scheduleNativePlayback(descriptor, offset) {
-    const ctx = getContext();
-    const source = ctx.createBufferSource();
-    const gainNode = ctx.createGain();
-    const startTime = ctx.currentTime + START_RAMP_SECONDS;
+  function startBufferedPlayback(descriptor, offset) {
+    const context = getContext();
+    const source = context.createBufferSource();
+    const gainNode = context.createGain();
+    const startTime = context.currentTime + START_RAMP_SECONDS;
 
     source.buffer = descriptor.buffer;
     source.loop = true;
@@ -285,89 +379,17 @@ export function createLoopPlayer(getAudioContext) {
     gainNode.gain.linearRampToValueAtTime(1, startTime + START_RAMP_SECONDS);
 
     source.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    gainNode.connect(context.destination);
     source.start(startTime, descriptor.loopStart + offset);
 
     registerNode(source, gainNode);
 
     playback = {
+      duration: descriptor.loopDuration,
+      isPlaying: true,
       noiseSrc: descriptor.noiseSrc,
       offset,
       startedAt: startTime,
-      duration: descriptor.loopDuration,
-      isPlaying: true,
-    };
-  }
-
-  function scheduleCrossfadePlayback(descriptor, offset) {
-    const ctx = getContext();
-    const currentSessionId = sessionId;
-    const firstStartTime = ctx.currentTime + START_RAMP_SECONDS;
-
-    const scheduleSegment = (segmentOffset, segmentStartTime, shouldFadeIn) => {
-      if (currentSessionId !== sessionId) {
-        return;
-      }
-
-      const remainingDuration = descriptor.loopEnd - segmentOffset;
-
-      if (remainingDuration <= 0.02) {
-        return;
-      }
-
-      const fadeDuration = Math.min(descriptor.crossfadeSeconds, remainingDuration / 2.5);
-      const source = ctx.createBufferSource();
-      const gainNode = ctx.createGain();
-      const attackDuration = shouldFadeIn ? fadeDuration : Math.min(START_RAMP_SECONDS, remainingDuration / 4);
-      const fullVolumeAt = segmentStartTime + Math.max(attackDuration, 0.005);
-      const fadeOutStart = segmentStartTime + remainingDuration - fadeDuration;
-
-      source.buffer = descriptor.buffer;
-      source.connect(gainNode);
-      gainNode.connect(ctx.destination);
-
-      gainNode.gain.setValueAtTime(0, segmentStartTime);
-
-      if (shouldFadeIn && fadeDuration > 0.01) {
-        gainNode.gain.setValueCurveAtTime(FADE_IN_CURVE, segmentStartTime, fadeDuration);
-      } else {
-        gainNode.gain.linearRampToValueAtTime(1, fullVolumeAt);
-      }
-
-      gainNode.gain.setValueAtTime(1, Math.min(fullVolumeAt, fadeOutStart));
-
-      if (fadeOutStart > segmentStartTime) {
-        gainNode.gain.setValueAtTime(1, fadeOutStart);
-      }
-
-      if (fadeDuration > 0.01) {
-        gainNode.gain.setValueCurveAtTime(FADE_OUT_CURVE, fadeOutStart, fadeDuration);
-      } else {
-        gainNode.gain.linearRampToValueAtTime(0, segmentStartTime + remainingDuration);
-      }
-
-      source.start(segmentStartTime, segmentOffset);
-      source.stop(segmentStartTime + remainingDuration);
-
-      registerNode(source, gainNode);
-
-      const nextStartTime = segmentStartTime + remainingDuration - fadeDuration;
-      const timeoutMs = Math.max(0, (nextStartTime - ctx.currentTime - SCHEDULE_AHEAD_SECONDS) * 1000);
-
-      scheduleTimerId = window.setTimeout(() => {
-        scheduleTimerId = null;
-        scheduleSegment(descriptor.loopStart, nextStartTime, true);
-      }, timeoutMs);
-    };
-
-    scheduleSegment(descriptor.loopStart + offset, firstStartTime, false);
-
-    playback = {
-      noiseSrc: descriptor.noiseSrc,
-      offset,
-      startedAt: firstStartTime,
-      duration: descriptor.loopDuration,
-      isPlaying: true,
     };
   }
 
@@ -377,8 +399,8 @@ export function createLoopPlayer(getAudioContext) {
     if (!playback.noiseSrc || playback.noiseSrc === noise.src) {
       playback = {
         ...playback,
-        noiseSrc: noise.src,
         duration: descriptor.loopDuration,
+        noiseSrc: noise.src,
       };
     }
 
@@ -387,10 +409,10 @@ export function createLoopPlayer(getAudioContext) {
 
   async function start(noise, position = 0) {
     const currentRequestId = ++requestId;
-    const ctx = getContext();
+    const context = getContext();
 
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
+    if (context.state === 'suspended') {
+      await context.resume();
     }
 
     const descriptor = await getDescriptor(noise);
@@ -400,13 +422,9 @@ export function createLoopPlayer(getAudioContext) {
     }
 
     const offset = normalizePosition(position, descriptor.loopDuration);
-    resetPlayback({ preservePosition: false });
 
-    if (descriptor.strategy === 'crossfade') {
-      scheduleCrossfadePlayback(descriptor, offset);
-    } else {
-      scheduleNativePlayback(descriptor, offset);
-    }
+    resetPlayback({ preservePosition: false });
+    startBufferedPlayback(descriptor, offset);
 
     return true;
   }
@@ -420,11 +438,11 @@ export function createLoopPlayer(getAudioContext) {
     }
 
     playback = {
+      duration: descriptor.loopDuration,
+      isPlaying: false,
       noiseSrc: noise.src,
       offset,
       startedAt: 0,
-      duration: descriptor.loopDuration,
-      isPlaying: false,
     };
 
     return true;
