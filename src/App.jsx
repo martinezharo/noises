@@ -5,17 +5,17 @@ import { PauseIcon } from './icons/Pause.jsx';
 import { TimerIcon } from './icons/Timer.jsx';
 import { SkipNextIcon } from './icons/SkipNext.jsx';
 
-function ChevronUpIcon({ size = 24 }) {
+function ChevronUpIcon({ size = 24, smSize = 24 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: `var(--width, ${size}px)`, height: `var(--height, ${size}px)` }} className="[--width:16px] sm:[--width:18px] [--height:16px] sm:[--height:18px]">
       <polyline points="18 15 12 9 6 15" />
     </svg>
   );
 }
 
-function ChevronDownIcon({ size = 24 }) {
+function ChevronDownIcon({ size = 24, smSize = 24 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: `var(--width, ${size}px)`, height: `var(--height, ${size}px)` }} className="[--width:16px] sm:[--width:18px] [--height:16px] sm:[--height:18px]">
       <polyline points="6 9 12 15 18 9" />
     </svg>
   );
@@ -274,14 +274,14 @@ function App() {
   }, []);
 
   return (
-    <div className={`${current.bgColor} flex flex-col h-screen transition-colors duration-1000 ${isIdle ? 'bg-black' : ''}`}>
+    <div className={`${current.bgColor} flex flex-col h-screen transition-colors duration-1000 ${isIdle ? 'bg-black' : ''} overflow-hidden`}>
       <div className={`flex flex-col h-full transition-opacity duration-1000 ${isIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <main className="h-4/5 flex items-center justify-center">
-          <h1 className={`text-9xl font-bold ${current.textColor} tracking-wider`}>
+        <main className="flex-1 flex items-center justify-center p-4 text-center">
+          <h1 className={`text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-bold ${current.textColor} tracking-wider break-words`}>
             {current.name.toUpperCase()}
           </h1>
         </main>
-        <nav className="h-1/5 flex items-center justify-center gap-12">
+        <nav className="h-1/3 sm:h-1/4 md:h-1/5 flex items-center justify-center gap-4 sm:gap-8 md:gap-12 pb-8 sm:pb-0">
           {/* Timer */}
           <div className="relative flex flex-col items-center group">
             <button
@@ -298,29 +298,29 @@ function App() {
                 }
               }}
               onMouseEnter={() => setFocusedIndex(0)}
-              className={`${current.textColor} relative z-10 w-24 h-24 flex flex-col items-center justify-center rounded-full transition-all duration-300 focus:outline-none focus:ring-0 select-none ${focusedIndex === 0 ? 'bg-white/10 scale-110' : 'hover:bg-white/5'} ${timerState === 'idle' ? 'opacity-40' : ''}`}
+              className={`${current.textColor} relative z-10 w-20 h-20 sm:w-24 sm:h-24 flex flex-col items-center justify-center rounded-full transition-all duration-300 focus:outline-none focus:ring-0 select-none ${focusedIndex === 0 ? 'bg-white/10 scale-105 sm:scale-110' : 'hover:bg-white/5'} ${timerState === 'idle' ? 'opacity-40' : ''}`}
               aria-label="Temporizador"
             >
               {timerState !== 'idle' && (
                 <>
-                  <div className="absolute top-2 transition-transform hover:scale-125 active:scale-95 pointer-events-none">
-                    <ChevronUpIcon size={18} />
+                  <div className="absolute top-1 sm:top-2 transition-transform hover:scale-125 active:scale-95 pointer-events-none">
+                    <ChevronUpIcon size={16} smSize={18} />
                   </div>
-                  <div className="absolute bottom-2 transition-transform hover:scale-125 active:scale-95 pointer-events-none">
-                    <ChevronDownIcon size={18} />
+                  <div className="absolute bottom-1 sm:bottom-2 transition-transform hover:scale-125 active:scale-95 pointer-events-none">
+                    <ChevronDownIcon size={16} smSize={18} />
                   </div>
                 </>
               )}
               
               <div className="z-10 flex items-center justify-center">
-                {timerState === 'idle' && <TimerIcon size={36} />}
+                {timerState === 'idle' && <TimerIcon size={32} smSize={36} />}
                 {timerState === 'editing' && (
-                  <span className="font-bold text-xl min-w-12 inline-block text-center leading-none">
+                  <span className="font-bold text-lg sm:text-xl min-w-10 sm:min-w-12 inline-block text-center leading-none">
                     {timerMinutes}m
                   </span>
                 )}
                 {(timerState === 'running' || timerState === 'paused') && (
-                  <span className={`font-mono text-xl min-w-13 inline-block text-center leading-none${timerState === 'paused' ? ' opacity-50' : ''}`}>
+                  <span className={`font-mono text-lg sm:text-xl min-w-11 sm:min-w-13 inline-block text-center leading-none${timerState === 'paused' ? ' opacity-50' : ''}`}>
                     {formatTimerDisplay(timerSecondsLeft)}
                   </span>
                 )}
@@ -332,18 +332,18 @@ function App() {
           <button
             onMouseEnter={() => setFocusedIndex(1)}
             onClick={() => { setFocusedIndex(1); handlePlayPause(); }}
-            className={`${current.textColor} w-24 h-24 flex items-center justify-center rounded-full transition-all duration-300 focus:outline-none focus:ring-0 ${focusedIndex === 1 ? 'bg-white/10 scale-110' : 'hover:bg-white/5'}`}
+            className={`${current.textColor} w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center rounded-full transition-all duration-300 focus:outline-none focus:ring-0 ${focusedIndex === 1 ? 'bg-white/10 scale-105 sm:scale-110' : 'hover:bg-white/5'}`}
           >
-            {playing ? <PauseIcon size={52} /> : <PlayIcon size={52} />}
+            {playing ? <PauseIcon size={44} smSize={52} /> : <PlayIcon size={44} smSize={52} />}
           </button>
 
           {/* Skip */}
           <button
             onMouseEnter={() => setFocusedIndex(2)}
             onClick={() => { setFocusedIndex(2); handleSkip(); }}
-            className={`${current.textColor} w-20 h-20 flex items-center justify-center rounded-full transition-all duration-300 focus:outline-none focus:ring-0 ${focusedIndex === 2 ? 'bg-white/10 scale-110' : 'hover:bg-white/5'}`}
+            className={`${current.textColor} w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center rounded-full transition-all duration-300 focus:outline-none focus:ring-0 ${focusedIndex === 2 ? 'bg-white/10 scale-105 sm:scale-110' : 'hover:bg-white/5'}`}
           >
-            <SkipNextIcon size={36} />
+            <SkipNextIcon size={32} smSize={36} />
           </button>
         </nav>
       </div>
