@@ -1,1 +1,264 @@
-@import "tailwindcss";
+:root {
+	color-scheme: dark;
+	font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+	width: 100%;
+	min-height: 100%;
+	margin: 0;
+}
+
+body {
+	background: #000000;
+}
+
+button,
+input,
+textarea,
+select {
+	font: inherit;
+}
+
+button {
+	border: 0;
+	color: inherit;
+	background: transparent;
+}
+
+.app-shell {
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+	min-height: 100dvh;
+	overflow: hidden;
+	transition: background-color 1000ms ease, color 1000ms ease;
+}
+
+.app-shell.theme-brown {
+	background-color: #78350f;
+	color: #fde68a;
+}
+
+.app-shell.theme-white,
+.app-shell.is-idle {
+	background-color: #000000;
+	color: #ffffff;
+}
+
+.app-layout {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 100vh;
+	min-height: 100dvh;
+	transition: opacity 1000ms ease;
+}
+
+.app-layout.is-idle {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.app-main {
+	display: flex;
+	flex: 1 1 auto;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+	text-align: center;
+}
+
+.noise-title {
+	margin: 0;
+	font-size: 3.75rem;
+	font-weight: 700;
+	letter-spacing: 0.2em;
+	word-break: break-word;
+}
+
+.control-bar {
+	display: flex;
+	height: 33.333333%;
+	align-items: center;
+	justify-content: center;
+	gap: 1rem;
+	padding-bottom: 2rem;
+}
+
+.control-group {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.control-button {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 999px;
+	cursor: pointer;
+	transition: background-color 300ms ease, opacity 300ms ease, transform 300ms ease;
+	-webkit-tap-highlight-color: transparent;
+	user-select: none;
+}
+
+.control-button:hover {
+	background-color: rgba(255, 255, 255, 0.05);
+}
+
+.control-button.is-focused {
+	background-color: rgba(255, 255, 255, 0.1);
+	transform: scale(1.05);
+}
+
+.control-button.is-dimmed {
+	opacity: 0.4;
+}
+
+.control-button:focus,
+.control-button:focus-visible {
+	outline: none;
+}
+
+.timer-button,
+.play-button {
+	width: 5rem;
+	height: 5rem;
+}
+
+.timer-button {
+	z-index: 1;
+	flex-direction: column;
+}
+
+.skip-button {
+	width: 4rem;
+	height: 4rem;
+}
+
+.timer-chevron {
+	position: absolute;
+	pointer-events: none;
+	transition: transform 200ms ease;
+}
+
+.timer-button:hover .timer-chevron {
+	transform: scale(1.15);
+}
+
+.timer-button:active .timer-chevron {
+	transform: scale(0.95);
+}
+
+.timer-chevron-up {
+	top: 0.25rem;
+}
+
+.timer-chevron-down {
+	bottom: 0.25rem;
+}
+
+.timer-display {
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.timer-edit-value,
+.timer-running-value {
+	display: inline-block;
+	text-align: center;
+	line-height: 1;
+}
+
+.timer-edit-value {
+	min-width: 2.5rem;
+	font-size: 1.125rem;
+	font-weight: 700;
+}
+
+.timer-running-value {
+	min-width: 2.75rem;
+	font-family: "Roboto Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+	font-size: 1.125rem;
+}
+
+.timer-running-value.is-paused {
+	opacity: 0.5;
+}
+
+@media (min-width: 640px) {
+	.noise-title {
+		font-size: 4.5rem;
+	}
+
+	.control-bar {
+		height: 25%;
+		gap: 2rem;
+		padding-bottom: 0;
+	}
+
+	.control-button.is-focused {
+		transform: scale(1.1);
+	}
+
+	.timer-button,
+	.play-button {
+		width: 6rem;
+		height: 6rem;
+	}
+
+	.skip-button {
+		width: 5rem;
+		height: 5rem;
+	}
+
+	.timer-chevron-up {
+		top: 0.5rem;
+	}
+
+	.timer-chevron-down {
+		bottom: 0.5rem;
+	}
+
+	.timer-edit-value,
+	.timer-running-value {
+		font-size: 1.25rem;
+	}
+}
+
+@media (min-width: 768px) {
+	.noise-title {
+		font-size: 5rem;
+	}
+
+	.control-bar {
+		height: 20%;
+		gap: 3rem;
+	}
+}
+
+@media (min-width: 1024px) {
+	.noise-title {
+		font-size: 7rem;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.app-shell,
+	.app-layout,
+	.control-button,
+	.timer-chevron {
+		transition: none;
+	}
+}

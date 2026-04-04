@@ -31,8 +31,7 @@ function formatTimerDisplay(seconds) {
 const NOISES = [
   {
     name: 'brown',
-    bgColor: 'bg-amber-900',
-    textColor: 'text-amber-200',
+    themeClassName: 'theme-brown',
     src: 'noises/brown-noise.wav',
     loop: {
       strategy: 'crossfade',
@@ -44,8 +43,7 @@ const NOISES = [
   },
   {
     name: 'white',
-    bgColor: 'bg-black',
-    textColor: 'text-white',
+    themeClassName: 'theme-white',
     src: 'noises/white-noise-looped.mp3',
     loop: {
       strategy: 'native',
@@ -73,9 +71,19 @@ function App() {
 
   function getAudioCtx() {
     if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)({
-        latencyHint: 'playback',
-      });
+      const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+
+      if (!AudioContextConstructor) {
+        throw new Error('AudioContext is not available in this browser');
+      }
+
+      try {
+        audioCtxRef.current = new AudioContextConstructor({
+          latencyHint: 'playback',
+        });
+      } catch {
+        audioCtxRef.current = new AudioContextConstructor();
+      }
     }
 
     return audioCtxRef.current;
@@ -86,6 +94,32 @@ function App() {
   }
 
   const current = NOISES[noiseIndex];
+
+  function getControlButtonClass({
+    isDimmed = false,
+    isFocusedButton = false,
+    variant = 'default',
+  } = {}) {
+    const classNames = ['control-button'];
+
+    if (variant === 'timer') {
+      classNames.push('timer-button');
+    } else if (variant === 'play') {
+      classNames.push('play-button');
+    } else if (variant === 'skip') {
+      classNames.push('skip-button');
+    }
+
+    if (isFocusedButton) {
+      classNames.push('is-focused');
+    }
+
+    if (isDimmed) {
+      classNames.push('is-dimmed');
+    }
+
+    return classNames.join(' ');
+  }
 
   const resetIdleTimer = useRef(() => {});
   
@@ -106,7 +140,13 @@ function App() {
       playerRef.current.stop();
       setPlaying(false);
     } else {
-      const started = await playerRef.current.start(current, playerRef.current.getPosition());
+      let started = false;
+
+      try {
+        started = await playerRef.current.start(current, playerRef.current.getPosition());
+      } catch {
+        started = false;
+      }
 
       if (started) {
         setPlaying(true);
@@ -121,10 +161,14 @@ function App() {
 
     setNoiseIndex(next);
 
-    if (playing) {
-      await playerRef.current.start(nextNoise, 0);
-    } else {
-      await playerRef.current.seek(nextNoise, 0);
+    try {
+      if (playing) {
+        await playerRef.current.start(nextNoise, 0);
+      } else {
+        await playerRef.current.seek(nextNoise, 0);
+      }
+    } catch {
+      // Keep the UI responsive if an older WebView fails to initialize audio.
     }
   }
 
@@ -276,16 +320,16 @@ function App() {
   }, []);
 
   return (
-    <div className={`${current.bgColor} flex flex-col h-screen transition-colors duration-1000 ${isIdle ? 'bg-black' : ''} overflow-hidden`}>
-      <div className={`flex flex-col h-full transition-opacity duration-1000 ${isIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <main className="flex-1 flex items-center justify-center p-4 text-center">
-          <h1 className={`text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-bold ${current.textColor} tracking-wider break-words`}>
+    <div className={`app-shell ${current.themeClassName}${isIdle ? ' is-idle' : ''}`}>
+      <div className={`app-layout${isIdle ? ' is-idle' : ''}`}>
+        <main className="app-main">
+          <h1 className="noise-title">
             {current.name.toUpperCase()}
           </h1>
         </main>
-        <nav className="h-1/3 sm:h-1/4 md:h-1/5 flex items-center justify-center gap-4 sm:gap-8 md:gap-12 pb-8 sm:pb-0">
+        <nav className="control-bar">
           {/* Timer */}
-          <div className="relative flex flex-col items-center group">
+          <div className="control-group">
             <button
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -300,29 +344,33 @@ function App() {
                 }
               }}
               onMouseEnter={() => setFocusedIndex(0)}
-              className={`${current.textColor} relative z-10 w-20 h-20 sm:w-24 sm:h-24 flex flex-col items-center justify-center rounded-full transition-all duration-300 focus:outline-none focus:ring-0 select-none ${focusedIndex === 0 ? 'bg-white/10 scale-105 sm:scale-110' : 'hover:bg-white/5'} ${timerState === 'idle' ? 'opacity-40' : ''}`}
+              className={getControlButtonClass({
+                isDimmed: timerState === 'idle',
+                isFocusedButton: focusedIndex === 0,
+                variant: 'timer',
+              })}
               aria-label="Temporizador"
             >
               {timerState !== 'idle' && (
                 <>
-                  <div className="absolute top-1 sm:top-2 transition-transform hover:scale-125 active:scale-95 pointer-events-none">
+                  <div className="timer-chevron timer-chevron-up">
                     <ChevronUpIcon size={16} smSize={18} />
                   </div>
-                  <div className="absolute bottom-1 sm:bottom-2 transition-transform hover:scale-125 active:scale-95 pointer-events-none">
+                  <div className="timer-chevron timer-chevron-down">
                     <ChevronDownIcon size={16} smSize={18} />
                   </div>
                 </>
               )}
               
-              <div className="z-10 flex items-center justify-center">
+              <div className="timer-display">
                 {timerState === 'idle' && <TimerIcon size={32} smSize={36} />}
                 {timerState === 'editing' && (
-                  <span className="font-bold text-lg sm:text-xl min-w-10 sm:min-w-12 inline-block text-center leading-none">
+                  <span className="timer-edit-value">
                     {timerMinutes}m
                   </span>
                 )}
                 {(timerState === 'running' || timerState === 'paused') && (
-                  <span className={`font-mono text-lg sm:text-xl min-w-11 sm:min-w-13 inline-block text-center leading-none${timerState === 'paused' ? ' opacity-50' : ''}`}>
+                  <span className={`timer-running-value${timerState === 'paused' ? ' is-paused' : ''}`}>
                     {formatTimerDisplay(timerSecondsLeft)}
                   </span>
                 )}
@@ -334,7 +382,10 @@ function App() {
           <button
             onMouseEnter={() => setFocusedIndex(1)}
             onClick={() => { setFocusedIndex(1); handlePlayPause(); }}
-            className={`${current.textColor} w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center rounded-full transition-all duration-300 focus:outline-none focus:ring-0 ${focusedIndex === 1 ? 'bg-white/10 scale-105 sm:scale-110' : 'hover:bg-white/5'}`}
+            className={getControlButtonClass({
+              isFocusedButton: focusedIndex === 1,
+              variant: 'play',
+            })}
           >
             {playing ? <PauseIcon size={44} smSize={52} /> : <PlayIcon size={44} smSize={52} />}
           </button>
@@ -343,7 +394,10 @@ function App() {
           <button
             onMouseEnter={() => setFocusedIndex(2)}
             onClick={() => { setFocusedIndex(2); handleSkip(); }}
-            className={`${current.textColor} w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center rounded-full transition-all duration-300 focus:outline-none focus:ring-0 ${focusedIndex === 2 ? 'bg-white/10 scale-105 sm:scale-110' : 'hover:bg-white/5'}`}
+            className={getControlButtonClass({
+              isFocusedButton: focusedIndex === 2,
+              variant: 'skip',
+            })}
           >
             <SkipNextIcon size={32} smSize={36} />
           </button>
