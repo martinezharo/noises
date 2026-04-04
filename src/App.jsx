@@ -73,7 +73,9 @@ function App() {
 
   function getAudioCtx() {
     if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)({
+        latencyHint: 'playback',
+      });
     }
 
     return audioCtxRef.current;
