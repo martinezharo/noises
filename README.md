@@ -1,29 +1,37 @@
-# White / Brown Noise — Noises
-===========================
-- A small React + Vite project that provides white/brown noise playback utilities and a simple UI to control loops and playback.
+# Noises
 
-Key details
-- **Framework:** React with Vite
-- **Styles:** Tailwind CSS
-- **Audio helpers:** small audio utility in `src/assets/audio/createLoopPlayer.js`
-- **Icons:** simple icon components in `src/assets/icons/`
+Noises is a small React/Vite player for bundled brown and white noise. It
+decodes the local audio assets with the Web Audio API and keeps playback looping
+in the browser.
 
-Getting started
-1. Install dependencies: `pnpm install` (or `npm install` / `yarn`)
-2. Run development server: `pnpm dev`
-3. Build for production: `pnpm build`
+## Features
 
-Project structure (high level)
-- `src/` — React source files (`App.jsx`, `main.jsx`, styles)
-- `src/assets/audio/` — audio helper(s) and players
-- `src/assets/icons/` — small icon components (Play, Pause, Skip, Timer)
-- `public/noises/` — bundled audio assets served statically
+- Play, pause, resume, and skip between brown and white noise.
+- Brown noise uses a searched crossfade loop boundary; white noise uses native
+  audio-buffer looping.
+- A countdown timer starts at five minutes, changes in five-minute steps,
+  supports pause/resume, and stops playback when it reaches zero.
+- Keyboard controls use the arrow keys, Enter, and Escape.
+- A Capacitor Android project is included alongside the web app.
 
-Notes for contributors
-- The project is intentionally small and focused on audio loop playback.
-- Keep components simple and prefer small, testable helpers for audio logic.
+Audio files live in [`public/noises`](public/noises); the loop player is in
+[`src/audio/createLoopPlayer.js`](src/audio/createLoopPlayer.js).
 
-License
-- This project is available under the MIT License (see `LICENSE`).
+## Development
 
-Made with ❤️ by [Oli](https://olivermartinezharo.com)
+Requires pnpm and Node.js 20.19+ or 22.12+ for the web toolchain. Use Node.js
+22.12+ for the Capacitor scripts.
+
+```bash
+pnpm install
+pnpm dev       # Vite development server
+pnpm lint      # ESLint
+pnpm build     # production build
+pnpm preview   # build and run the Wrangler preview
+pnpm deploy    # build and deploy with Wrangler
+pnpm sync      # build and sync the Capacitor Android project
+```
+
+Cloudflare/Vite integration is configured in [`vite.config.js`](vite.config.js)
+and [`wrangler.jsonc`](wrangler.jsonc). See [LICENSE](LICENSE) for the license
+terms.
