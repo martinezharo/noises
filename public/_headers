@@ -1,0 +1,10 @@
+# Keep the update entry points revalidating so a new deploy is picked up
+# immediately; hashed assets under /assets/ stay immutable by default.
+/sw.js
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache
